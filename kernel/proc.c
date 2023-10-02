@@ -15,7 +15,7 @@ struct proc *initproc;
 int nextpid = 1;
 struct spinlock pid_lock;
 
-extern void forkret(void);
+extern void forkret();
 static void freeproc(struct proc *p);
 
 extern char trampoline[]; // trampoline.S
@@ -170,6 +170,19 @@ freeproc(struct proc *p)
   p->xstate = 0;
   p->state = UNUSED;
 }
+
+uint64
+get_unused_processes(){
+  uint64 num = 0;
+  struct proc *p;
+  for (p = proc; p < &proc[NPROC]; p++){
+    if (p->state != UNUSED){
+      num++;
+    }
+  }
+  return num;
+}
+
 
 // Create a user page table for a given process, with no user memory,
 // but with trampoline and trapframe pages.
