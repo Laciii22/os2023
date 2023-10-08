@@ -69,16 +69,6 @@ sys_sleep(void)
   return 0;
 }
 
-
-#ifdef LAB_PGTBL
-int
-sys_pgaccess(void)
-{
-  // lab pgtbl: your code here.
-  return 0;
-}
-#endif
-
 uint64
 sys_kill(void)
 {
@@ -100,3 +90,28 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+int
+sys_pgaccess(void)
+{
+  uint64 startaddr;
+  int npage;
+  uint64 useraddr;
+  argaddr(0, &startaddr);
+  argint(1, &npage);
+  argaddr(2, &useraddr);
+
+  uint64 bitmask = 0;
+  uint64 complement = ~PTE_A;
+  struct proc *p = myproc();
+  for (int i=0; i< npage; ++i){
+    pte_t *pte = walk(p->pagetable, startaddr+i*PGSIZE, 0);
+    if (*pte & PTE_A){
+      bitmask |= (1 <<i);
+      *pte &=complement;
+    }
+  }
+  copyout(p->pagetable, useraddr, (char *)&bitmask, sizeof(bitmask));
+  return 0;
+}
+
