@@ -386,34 +386,53 @@ bmap(struct inode *ip, uint bn)
   struct buf *bp;
 
   if(bn < NDIRECT){
-    if((addr = ip->addrs[bn]) == 0){
-      addr = balloc(ip->dev);
-      if(addr == 0)
-        return 0;
-      ip->addrs[bn] = addr;
-    }
+    if((addr = ip->addrs[bn]) == 0)
+      ip->addrs[bn] = addr = balloc(ip->dev);
     return addr;
   }
   bn -= NDIRECT;
 
   if(bn < NINDIRECT){
     // Load indirect block, allocating if necessary.
-    if((addr = ip->addrs[NDIRECT]) == 0){
-      addr = balloc(ip->dev);
-      if(addr == 0)
-        return 0;
-      ip->addrs[NDIRECT] = addr;
-    }
+    if((addr = ip->addrs[NDIRECT]) == 0)
+      ip->addrs[NDIRECT] = addr = balloc(ip->dev);
     bp = bread(ip->dev, addr);
     a = (uint*)bp->data;
     if((addr = a[bn]) == 0){
-      addr = balloc(ip->dev);
-      if(addr){
-        a[bn] = addr;
-        log_write(bp);
-      }
+      a[bn] = addr = balloc(ip->dev);
+      log_write(bp);
     }
     brelse(bp);
+    return addr;
+  }
+
+  bn -= NINDIRECT;
+
+  if(bn < NDINDIRECT){
+    //load double indirect block
+    if((addr = ip->addrs[NDIRECT+1]) == 0)
+      ip->addrs[NDIRECT+1] = addr = balloc(ip->dev);
+    bp = bread(ip->dev, addr);
+    a = (uint*)bp->data;
+
+    uint dind_index = bn / NINDIRECT;
+    uint ind_index = bn % NINDIRECT;
+
+    //load indirect block
+    if((addr = a[dind_index]) == 0){
+      a[dind_index] = addr = balloc(ip->dev);
+      log_write(bp);
+    }
+    brelse(bp);
+
+    bp = bread(ip->dev,addr);
+    a = (uint*)bp->data;
+    if((addr = a[ind_index]) == 0){
+      a[ind_index] = addr = balloc(ip->dev);
+      log_write(bp);
+    }
+    brelse(bp);
+
     return addr;
   }
 
@@ -426,8 +445,8 @@ void
 itrunc(struct inode *ip)
 {
   int i, j;
-  struct buf *bp;
-  uint *a;
+  struct buf *bp,*bp2;
+  uint *a,*a2;
 
   for(i = 0; i < NDIRECT; i++){
     if(ip->addrs[i]){
@@ -447,7 +466,26 @@ itrunc(struct inode *ip)
     bfree(ip->dev, ip->addrs[NDIRECT]);
     ip->addrs[NDIRECT] = 0;
   }
-
+  
+  if(ip->addrs[NDIRECT+1]){ //prezerame ci je dvojito nepriamy blok
+    bp = bread(ip->dev, ip->addrs[NDIRECT+1]); //naciatnie bloku
+    a = (uint*)bp->data;
+    for(j=0;j < NINDIRECT;j++){ //prejdeme polozky
+      if(a[j]){ //ak nejake existuju
+        bp2 = bread(ip->dev, a[j]); //nacitanie bloku
+        a2 = (uint*)bp2->data; //nacitanie obsahu
+        for(i = 0; i < NINDIRECT;i++){ //prejdeme znova obsah cely
+          if(a2[i]) //ak cosi exisujt=e
+            bfree(ip->dev,a2[i]); //uvolni to 
+          }
+          brelse(bp2); // release
+          bfree(ip->dev,a[j]); //dealokacia bolku
+      }
+    }
+    brelse(bp);
+    bfree(ip->dev,ip->addrs[NDIRECT+1]);
+    ip->addrs[NDIRECT+1] = 0;
+  }
   ip->size = 0;
   iupdate(ip);
 }
