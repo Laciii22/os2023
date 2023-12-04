@@ -62,3 +62,6 @@
 //   TRAPFRAME (p->trapframe, used by the trampoline)
 //   TRAMPOLINE (the same page as in the kernel)
 #define TRAPFRAME (TRAMPOLINE - PGSIZE)
+
+//the start addr of vma 4gb
+#define VMA_BASE 0x100000000
